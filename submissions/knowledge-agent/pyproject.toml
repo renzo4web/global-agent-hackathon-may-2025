@@ -1,0 +1,13 @@
+[project]
+name = "knowledge-agent"
+version = "0.1.0"
+description = "Agent that use various sources to generate knowledge"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "agno>=1.5.5",
+    "markdown>=3.8",
+    "openai>=1.82.0",
+    "pydantic>=2.11.5",
+    "streamlit>=1.45.1",
+]
