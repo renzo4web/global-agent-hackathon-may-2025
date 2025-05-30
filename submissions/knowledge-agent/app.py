@@ -1,6 +1,6 @@
 import streamlit as st
 import asyncio
-from agents import create_analysis_team
+from agents import create_analysis_team, DEFAULT_MODEL_ID, DEFAULT_BASE_URL
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -28,12 +28,17 @@ with st.sidebar:
     api_key = st.text_input(
         "🔑 OpenAI API Key",
         type="password",
-        help="Your API key is required to power the AI analyses."
+        help="Your API key is required to power the AI analyses.\n We do not store your API key."
     )
     base_url = st.text_input(
         "🌐 Base URL (Optional)",
-        value="https://api.openai.com/v1",
+        value=DEFAULT_BASE_URL,
         help="Default is OpenAI. Modify for proxies or other compatible LLM providers."
+    )
+    model_id = st.text_input(
+        "🤖 Model ID (Optional)",
+        value=DEFAULT_MODEL_ID,
+        help="Default is gpt-4o. Modify for other models."
     )
     st.markdown("---")
     with st.expander("📘 How to Use", expanded=False):
@@ -83,6 +88,9 @@ elif st.session_state.sources:
 if st.session_state.sources:
     st.markdown("---")
     st.markdown("### My Content Sources")
+    if st.button("🗑️ Clear All Sources", type="secondary", use_container_width=True):
+        st.session_state.sources = []
+        st.rerun()
     num_columns = min(len(st.session_state.sources), 3)
     if not st.session_state.sources:  # Should not happen if this block is entered, but good for safety
         num_columns = 1
@@ -156,7 +164,7 @@ if st.button("🚀 Analyze All Sources", type="primary", use_container_width=Tru
         st.warning("❗ No Analysis Selected: Please choose at least one analysis type.", icon="🧪")
     else:
         try:
-            team = create_analysis_team(api_key, base_url)
+            team = create_analysis_team(api_key, base_url, model_id)
             combined_content = "\n\n--- Source Separator ---\n\n".join(
                 [f"Source {i + 1}:\n{s['content']}" for i, s in enumerate(st.session_state.sources)]
             )

@@ -2,8 +2,10 @@ from agno.agent import Agent
 from agno.models.openai.like import OpenAILike
 from agno.team import Team
 
+DEFAULT_MODEL_ID = "gpt-4o"
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
-def create_analysis_team(api_key: str, base_url: str = "https://api.openai.com/v1", model_id: str = "gpt-4o"):
+def create_analysis_team(api_key: str, base_url: str = DEFAULT_BASE_URL, model_id: str = DEFAULT_MODEL_ID):
     """Create a team of analysis agents"""
 
     # Create model
