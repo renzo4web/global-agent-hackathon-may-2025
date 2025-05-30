@@ -1,6 +1,7 @@
 import streamlit as st
 import asyncio
 from agents import create_analysis_team, DEFAULT_MODEL_ID, DEFAULT_BASE_URL
+from utils import count_tokens
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -87,6 +88,22 @@ elif st.session_state.sources:
 # Display added sources
 if st.session_state.sources:
     st.markdown("---")
+
+    combined_text = "\n\n".join([s['content'] for s in st.session_state.sources])
+    total_tokens = count_tokens(combined_text)
+
+    st.info(f"📊 **Total tokens: {total_tokens:,}**")
+
+    with st.expander("Common model context limits"):
+        st.markdown("""
+        - GPT-4: 8K - 128K tokens
+        - Claude: 100K - 200K tokens  
+        - Gemini: 1M+ tokens
+        - Mistral: 32K - 131K tokens
+        - Most open models: 4K - 32K tokens
+        """)
+
+
     st.markdown("### My Content Sources")
     if st.button("🗑️ Clear All Sources", type="secondary", use_container_width=True):
         st.session_state.sources = []
