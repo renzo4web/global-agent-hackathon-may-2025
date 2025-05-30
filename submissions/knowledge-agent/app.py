@@ -3,6 +3,11 @@ import asyncio
 from agents import create_analysis_team, DEFAULT_MODEL_ID, DEFAULT_BASE_URL
 from utils import count_tokens
 
+import PyPDF2
+import io
+
+MAX_SOURCES = 20
+
 # --- Page Configuration ---
 st.set_page_config(
     page_title="KnowledgeAgent Pro",
@@ -14,8 +19,11 @@ st.set_page_config(
 # --- Initialize Session State ---
 if "sources" not in st.session_state:
     st.session_state.sources = []
+# To clean source loaders
 if "textarea_key_counter" not in st.session_state:
-    st.session_state.textarea_key_counter = 0  # Counter for the textarea key
+    st.session_state.textarea_key_counter = 0
+if "file_uploader_key" not in st.session_state:
+    st.session_state.file_uploader_key = 0
 
 # --- Header ---
 st.markdown("<h1 style='text-align: center; color: #333;'>✨ KnowledgeAgent Pro ✨</h1>", unsafe_allow_html=True)
@@ -56,6 +64,40 @@ with st.sidebar:
 # --- Main Application Area ---
 st.markdown("## 1. Add Your Content Sources")
 
+# PDF Uploader
+uploaded_file = st.file_uploader(
+    "📄 Upload a PDF file:",
+    type=['pdf'],
+    key=f"pdf_uploader_{st.session_state.file_uploader_key}"
+)
+
+if uploaded_file is not None and len(st.session_state.sources) < MAX_SOURCES:
+    try:
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.read()))
+        text_parts = []
+        for page in pdf_reader.pages:
+            text = page.extract_text()
+            if text.strip():
+                text_parts.append(text)
+
+        text_content = "\n\n".join(text_parts)
+
+        if text_content:
+            # add pdf to sources
+            st.session_state.sources.append({
+                "title": f"📄 {uploaded_file.name[:60]}...",
+                "content": text_content
+            })
+
+            # IMPORTANT: Increment the file uploader key
+            st.session_state.file_uploader_key += 1
+
+            st.success(f"✅ PDF '{uploaded_file.name}' added successfully!")
+            st.rerun()
+
+    except Exception as e:
+        st.error(f"❌ Error reading PDF: {str(e)}")
+
 # Generate a dynamic key for the text_area
 current_textarea_key = f"new_source_input_{st.session_state.textarea_key_counter}"
 
@@ -66,24 +108,19 @@ new_source_text_from_widget = st.text_area(
     key=current_textarea_key  # Dynamic key
 )
 
-MAX_SOURCES = 20
-
 if len(st.session_state.sources) < MAX_SOURCES:
-    if st.button("➕ Add Source", use_container_width=True, type="secondary"):
-        # Read from the text_area using its current dynamic key
+    if st.button("➕ Add Text Source", use_container_width=True, type="secondary"):
         text_to_add = st.session_state.get(current_textarea_key, "").strip()
-        if text_to_add:
-            source_title = text_to_add[:70] + "..."
-            st.session_state.sources.append({"title": source_title, "content": text_to_add})
 
-            # Increment the counter to change the key for the next render
+        if text_to_add:
+            st.session_state.sources.append({
+                "title": f"📝 {text_to_add[:60]}...",
+                "content": text_to_add
+            })
             st.session_state.textarea_key_counter += 1
-            st.rerun()  # Force rerun. The text_area will now have a new key and appear empty.
+            st.rerun()
         else:
-            st.warning("❗ Please paste some text to add as a source.", icon="⚠️")
-elif st.session_state.sources:
-    st.info(f"ℹ️ Maximum of {MAX_SOURCES} sources reached. Analyze current sources or remove some to add new ones.",
-            icon="ℹ️")
+            st.warning("❗ Please paste some text to add.", icon="⚠️")
 
 # Display added sources
 if st.session_state.sources:
@@ -102,7 +139,6 @@ if st.session_state.sources:
         - Mistral: 32K - 131K tokens
         - Most open models: 4K - 32K tokens
         """)
-
 
     st.markdown("### My Content Sources")
     if st.button("🗑️ Clear All Sources", type="secondary", use_container_width=True):
@@ -172,7 +208,7 @@ st.markdown("---")
 
 # --- Action Button ---
 if st.button("🚀 Analyze All Sources", type="primary", use_container_width=True,
-             help="Analyzes all added content sources together!"):
+             help="Analyzes all added content sources together!", disabled=not st.session_state.sources):
     if not api_key:
         st.error("❗ API Key Missing: Please enter your OpenAI API key in the sidebar.", icon="🔑")
     elif not st.session_state.sources:
