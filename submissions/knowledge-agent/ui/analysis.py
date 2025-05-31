@@ -1,11 +1,9 @@
 import json
 import streamlit as st
 import asyncio
-from agents import create_analysis_team, Result
+from agents import create_analysis_team
 from utils import combine_sources, create_download_button, strip_code_fences, render_dot_quickchart, normalise_payload
 import pandas as pd
-from pydantic import BaseModel
-from io import StringIO
 
 ANALYSIS_OPTIONS = {
     "📄 Summary": {"selected": True, "help": "A concise overview of the main points."},

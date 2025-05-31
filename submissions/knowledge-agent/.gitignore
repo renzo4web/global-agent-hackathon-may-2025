@@ -1,4 +1,4 @@
 .idea
 __pycache__/*
-components/__pycache__/
+ui/__pycache__/
 
