@@ -2,6 +2,9 @@ import streamlit as st
 import asyncio
 from agents import create_analysis_team, Result
 from utils import combine_sources, create_download_button, strip_code_fences, render_dot_quickchart
+import pandas as pd
+from io import StringIO
+
 
 ANALYSIS_OPTIONS = {
     "📄 Summary": {"selected": True, "help": "A concise overview of the main points."},
@@ -9,6 +12,7 @@ ANALYSIS_OPTIONS = {
     "🗺️ Concept Map": {"selected": False, "help": "A text-based representation of key concepts and relationships."},
     "🎯 Key Points": {"selected": False, "help": "A bulleted list of the most important takeaways."},
     "🔗 Intersections": {"selected": False, "help": "Table of overlaps across sources."},
+    "🧭 Topic Coverage": {"selected": False, "help": "Heat-map of which source covers which sub-topic."},
 }
 
 def render_analysis_config():
@@ -141,23 +145,29 @@ def render_results(results):
 
         for i, (analysis_type, content) in enumerate(results.items()):
             with tabs[i]:
-                st.markdown(f"### {analysis_type}")
-                clean = strip_code_fences(content)
-                if analysis_type == "🗺️ Concept Map":
-                    render_dot_quickchart(clean)
-                else:
-                    st.markdown(clean, unsafe_allow_html=True)
+                render_single_result(analysis_type, content)
     else:
         analysis_type, content = list(results.items())[0]
-        st.markdown(f"### {analysis_type}")
-        clean = strip_code_fences(content)
-        if analysis_type == "🗺️ Concept Map":
-            render_dot_quickchart(clean)
-        else:
-            st.markdown(clean, unsafe_allow_html=True)
-
+        render_single_result(analysis_type, content)
     # Download section
     render_download_section(results)
+
+
+def render_single_result(analysis_type, content):
+    """Helper function to render a single analysis result"""
+    st.markdown(f"### {analysis_type}")
+    clean = strip_code_fences(content)
+    if analysis_type == "🧭 Topic Coverage":
+        # keep only the CSV chunk (lines that still contain commas)
+        csv_lines = [ln for ln in clean.splitlines() if "," in ln]
+        csv_text = "\n".join(csv_lines)
+
+        df = pd.read_csv(StringIO(csv_text))
+        st.dataframe(df, use_container_width=True)
+    elif analysis_type == "🗺️ Concept Map":
+        render_dot_quickchart(clean)
+    else:
+        st.markdown(clean, unsafe_allow_html=True)
 
 
 def render_download_section(results):
@@ -189,7 +199,7 @@ def render_download_section(results):
         for i, (analysis_type, content) in enumerate(results.items()):
             with cols[i % col_count]:
                 create_download_button(
-                    label=f"📄 {analysis_type}",
+                    label=analysis_type,
                     data=content,
                     file_name_prefix=f"all_sources_{str(analysis_type)}",
                     key_suffix=str(analysis_type),
@@ -199,7 +209,7 @@ def render_download_section(results):
         # Single download
         analysis_type = list(results.keys())[0]
         create_download_button(
-            label=f"📄 Download {analysis_type}",
+            label=f"Download {analysis_type}",
             data=list(results.values())[0],
             file_name_prefix=f"all_sources_{str(analysis_type)}",
             key_suffix="single",

@@ -88,12 +88,27 @@ def create_analysis_team(api_key: str, base_url: str = DEFAULT_BASE_URL, model_i
         ],
     )
 
+    coverage_agent = Agent(
+        name="Coverage Analyst",
+        role="Builds a source-by-topic coverage matrix",
+        model=model,
+        tools=common_tools,
+        response_model=Result,
+        use_json_mode=True,
+        instructions=[
+              "Extract up to 10 sub-topics"
+              "Produce CSV whose first row is: Topic,Source 1,Source 2,..."
+              "Put ✓ under a source if the topic appears there, else blank"
+              "Return ONLY the CSV – no prose, no backticks"
+        ],
+    )
+
     # Create team
     team = Team(
         name="Analysis Team",
         mode="coordinate",
         model=model,
-        members=[summarizer, analyzer, concept_mapper, key_points_extractor, intersection_finder],
+        members=[summarizer, analyzer, concept_mapper, key_points_extractor, intersection_finder, coverage_agent],
         instructions=[
             "Route the request to the appropriate team member based on the analysis type",
             "Ensure the output matches the requested length (Brief/Standard/Detailed)",

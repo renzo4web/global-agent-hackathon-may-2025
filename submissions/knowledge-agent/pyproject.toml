@@ -8,6 +8,7 @@ dependencies = [
     "agno>=1.5.5",
     "markdown>=3.8",
     "openai>=1.82.0",
+    "pandas>=2.2.3",
     "pydantic>=2.11.5",
     "pypdf2>=3.0.1",
     "streamlit>=1.45.1",
