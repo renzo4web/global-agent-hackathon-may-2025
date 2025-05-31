@@ -2,6 +2,7 @@ import streamlit as st
 from components.sidebar import render_sidebar
 from components.sources import init_source_state, render_source_input, render_sources_list
 from components.analysis import render_analysis_config, render_analysis_button, render_results
+from components.footer import render_footer
 
 # Page Configuration
 st.set_page_config(
@@ -35,3 +36,7 @@ results = render_analysis_button(api_key, base_url, model_id, selected_analysis_
 # Display Results
 if results:
     render_results(results)
+
+# Footer
+render_footer()
+
