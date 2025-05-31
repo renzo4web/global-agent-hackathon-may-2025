@@ -9,7 +9,7 @@ def render_footer():
 
     with col1:
         st.markdown("**KnowledgeAgent Pro**")
-        st.markdown("Created by [renzo4web](https://github.com/renzo4web)")
+        st.markdown("Created by [renzo4web](https://github.com/renzo4web) | [X/Twitter](https://x.com/turbopila)")
 
     with col2:
         st.markdown("**Global Agent Hackathon May 2025**")

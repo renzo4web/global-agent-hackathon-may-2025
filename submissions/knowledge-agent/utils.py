@@ -3,9 +3,9 @@ import tiktoken
 import PyPDF2
 import io
 import streamlit as st
-import re
 import textwrap
-
+import re, json
+from pydantic import BaseModel
 
 def count_tokens(text):
     """Count tokens using tiktoken, fallback to simple estimation"""
@@ -75,7 +75,7 @@ def render_dot_quickchart(raw: str, width: int = 700):
     Show a DOT graph via QuickChart GraphViz PNG.
     """
     # 1. Strip ``` fences or stray labels
-    dot = re.sub(r"```[a-zA-Z0-9]*\s*\n(.+?)```", r"\1", raw, flags=re.DOTALL).strip()
+    dot = re.sub(r"```[a-zA-Z0-9]*\s*\n(.+?)```", r'\1', raw, flags=re.DOTALL).strip()
     dot = textwrap.dedent(dot)
 
     # 2. If the agent still used 'A --> B' Mermaid arrows, convert them
@@ -88,4 +88,45 @@ def render_dot_quickchart(raw: str, width: int = 700):
     url = f"https://quickchart.io/graphviz?format=png&graph={encoded}"
 
     st.image(url, width=width)
+
+
+# ------------------------------------------------------------------
+# UNIVERSAL RESPONSE NORMALISER
+# ------------------------------------------------------------------
+def normalise_payload(analysis_type: str, raw):
+    """
+    Devuelve un string limpio para el front-end.
+    """
+    if isinstance(raw, BaseModel):
+        raw = raw.model_dump_json()
+
+    text = str(raw)
+    text = re.sub(r"^```[a-zA-Z0-9]*\s*\n|\n```$", "", text, flags=re.S).strip()
+
+    # 2.  Quiz mantiene su lógica especial
+    if analysis_type == "📝 Knowledge Check":
+        # Already JSON? great
+        if text.lstrip().startswith("{"):
+            return text
+        # Looks like a Pydantic repr → eval and dump
+        if text.startswith("Quiz("):
+            try:
+                obj = eval(text, {}, {})          # safe: no globals, locals
+                if isinstance(obj, BaseModel):
+                    return obj.model_dump_json()
+            except Exception:
+                pass
+        # If nothing worked we fall through – UI will warn.
+
+    if text.lstrip().startswith("{"):
+        try:
+            obj = json.loads(text)
+            if "result" in obj:
+                return obj["result"]
+            if "csv" in obj:
+                return obj["csv"]
+        except json.JSONDecodeError:
+            pass
+
+    return text
 

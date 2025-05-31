@@ -1,10 +1,11 @@
+import json
 import streamlit as st
 import asyncio
 from agents import create_analysis_team, Result
-from utils import combine_sources, create_download_button, strip_code_fences, render_dot_quickchart
+from utils import combine_sources, create_download_button, strip_code_fences, render_dot_quickchart, normalise_payload
 import pandas as pd
+from pydantic import BaseModel
 from io import StringIO
-
 
 ANALYSIS_OPTIONS = {
     "📄 Summary": {"selected": True, "help": "A concise overview of the main points."},
@@ -13,7 +14,9 @@ ANALYSIS_OPTIONS = {
     "🎯 Key Points": {"selected": False, "help": "A bulleted list of the most important takeaways."},
     "🔗 Intersections": {"selected": False, "help": "Table of overlaps across sources."},
     "🧭 Topic Coverage": {"selected": False, "help": "Heat-map of which source covers which sub-topic."},
+    "📝 Knowledge Check": {"selected": False, "help": "Generate 5–10 MCQs with answer key."},
 }
+
 
 def render_analysis_config():
     """Render analysis configuration options"""
@@ -112,17 +115,8 @@ async def run_analysis_tasks(team, combined_content, selected_analysis_keys, out
         {combined_content}
         """
         response = await team.arun(prompt)
-        content = response.content
-        # 1) If the team propagated the Result object ➜ extract .result
-        if hasattr(content, "result"):
-            return analysis_type, content.result
-        # 2) If it’s a raw JSON string ➜ parse with Pydantic
-        try:
-            parsed = Result.model_validate_json(content)
-            return analysis_type, parsed.result
-        except Exception:
-        # 3) Fallback: it’s already a clean string
-            return analysis_type, content
+        clean = normalise_payload(analysis_type, response.content)
+        return analysis_type, clean
 
     tasks = [process_single_analysis(analysis_type) for analysis_type in selected_analysis_keys]
     results_list = await asyncio.gather(*tasks)
@@ -130,45 +124,72 @@ async def run_analysis_tasks(team, combined_content, selected_analysis_keys, out
     return {res_type: res_content for res_type, res_content in results_list}
 
 
+# ------------------------------------------------------------------
+# MAIN DISPATCHER
+# ------------------------------------------------------------------
 def render_results(results):
-    """Render analysis results with download options"""
+    """Show every analysis result and add download buttons."""
     if not results:
         return
 
     st.markdown("---")
     st.markdown("## 💡 Your Generated Insights")
 
-    # Display results in tabs or single view
     if len(results) > 1:
-        tab_titles = list(results.keys())
-        tabs = st.tabs(tab_titles)
-
+        tabs = st.tabs(list(results.keys()))
         for i, (analysis_type, content) in enumerate(results.items()):
             with tabs[i]:
-                render_single_result(analysis_type, content)
+                _render_block(analysis_type, content)
     else:
-        analysis_type, content = list(results.items())[0]
-        render_single_result(analysis_type, content)
-    # Download section
+        analysis_type, content = next(iter(results.items()))
+        _render_block(analysis_type, content)
+
     render_download_section(results)
 
 
-def render_single_result(analysis_type, content):
-    """Helper function to render a single analysis result"""
+# ------------------------------------------------------------------
+# HELPER: renders a single block by type
+# ------------------------------------------------------------------
+def _render_block(analysis_type: str, content: str):
     st.markdown(f"### {analysis_type}")
-    clean = strip_code_fences(content)
+
+    # --- 1. Topic Coverage -> DataFrame --------------------------
     if analysis_type == "🧭 Topic Coverage":
-        # keep only the CSV chunk (lines that still contain commas)
-        csv_lines = [ln for ln in clean.splitlines() if "," in ln]
-        csv_text = "\n".join(csv_lines)
+        if content.lstrip().startswith("{"):  # came as {"csv":"..."}
+                content = json.loads(content)["csv"]
+        # Safe parsing
+        lines = [l for l in content.strip().splitlines() if l]
+        header = lines[0].split(",", 1)              # ['Topic', 'Source 1']
+        rows = [line.split(",", 1) for line in lines[1:]]
 
-        df = pd.read_csv(StringIO(csv_text))
+        df = pd.DataFrame(rows, columns=header)
         st.dataframe(df, use_container_width=True)
-    elif analysis_type == "🗺️ Concept Map":
-        render_dot_quickchart(clean)
-    else:
-        st.markdown(clean, unsafe_allow_html=True)
+        return
 
+    # --- 2. Knowledge Check -> collapsible Q&A cards -------------
+    if analysis_type == "📝 Knowledge Check":
+        try:
+            items = json.loads(content)["questions"]
+        except Exception as e:
+            st.warning(f"⚠️ Couldn’t decode quiz JSON.\n\nRaw payload:\n{content}")
+            return
+
+        for idx, item in enumerate(items, 1):
+            st.markdown(f"**Q{idx}. {item['question']}**")
+            for j, opt in enumerate(item["options"]):
+                st.markdown(f"- **{chr(65+j)}.** {opt}")
+            with st.expander("Show answer"):
+                st.markdown(f"**Correct:** {chr(65 + item['correct_index'])}")
+            st.markdown("---")
+        return
+
+    # --- 3. Concept Map -> quickchart PNG ------------------------
+    if analysis_type == "🗺️ Concept Map":
+        render_dot_quickchart(strip_code_fences(content))
+        return
+
+    # --- 4. Default -> markdown ---------------------------------
+    st.markdown(strip_code_fences(content), unsafe_allow_html=True)
 
 def render_download_section(results):
     """Render download buttons for results"""

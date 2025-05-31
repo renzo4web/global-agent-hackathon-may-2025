@@ -1,3 +1,4 @@
+from typing import List
 from agno.agent import Agent
 from agno.models.openai.like import OpenAILike
 from agno.tools.reasoning import ReasoningTools
@@ -14,6 +15,17 @@ class Result(BaseModel):
     """Uniform payload returned by every agent"""
     result: str
 
+class CoverageCSV(BaseModel):
+    """The agent must return a single CSV string."""
+    csv: str
+
+class QuizItem(BaseModel):
+    question: str
+    options: List[str]
+    correct_index: int
+
+class Quiz(BaseModel):
+    questions: List[QuizItem]
 
 def create_analysis_team(api_key: str, base_url: str = DEFAULT_BASE_URL, model_id: str = DEFAULT_MODEL_ID):
     """Create a team of analysis agents"""
@@ -93,31 +105,55 @@ def create_analysis_team(api_key: str, base_url: str = DEFAULT_BASE_URL, model_i
         role="Builds a source-by-topic coverage matrix",
         model=model,
         tools=common_tools,
-        response_model=Result,
+        response_model=CoverageCSV,
         use_json_mode=True,
+        expected_output="\",Source 1",
         instructions=[
-              "Extract up to 10 sub-topics"
-              "Produce CSV whose first row is: Topic,Source 1,Source 2,..."
-              "Put ✓ under a source if the topic appears there, else blank"
-              "Return ONLY the CSV – no prose, no backticks"
+            "Step 1 Find up to 10 sub-topics that span the sources.",
+            "Step 2 Create a CSV with header: Topic,Source 1,Source 2,…",
+            "Put ✓ where the topic appears, leave blank otherwise.",
+            "Return **exactly** the JSON object {\"csv\": \"<the CSV>\"}.",
+            "NO markdown, NO back-ticks, NO commentary."
+        ],
+    )
+
+    quiz_agent = Agent(
+        name="Quiz Maker",
+        role="Creates multiple-choice questions to reinforce learning",
+        model=model,
+        tools=common_tools,
+        response_model=Quiz,
+        use_json_mode=True,  # emits {"questions":[{...}, ...]}
+        expected_output="\"questions\": [",  # quick structural check
+        instructions=[
+            "Write 5-10 items covering key facts across all sources.",
+            "Each item has fields: question (str), options (list of 4), correct_index (int 0-3).",
+            "Return ONLY the JSON object matching the schema—no markdown, no prose, no back-ticks."
         ],
     )
 
     # Create team
     team = Team(
         name="Analysis Team",
-        mode="coordinate",
+        mode="route",
         model=model,
-        members=[summarizer, analyzer, concept_mapper, key_points_extractor, intersection_finder, coverage_agent],
+        members=[summarizer, analyzer, concept_mapper, key_points_extractor, intersection_finder, coverage_agent, quiz_agent],
         instructions=[
-            "Route the request to the appropriate team member based on the analysis type",
+            # explicit mapping so the router never guesses wrong
+            "Always use this mapping:",
+            "  📄 Summary            → Summarizer",
+            "  🔍 In-depth Analysis  → Analyzer",
+            "  🗺️ Concept Map        → Concept Mapper",
+            "  🎯 Key Points         → Key Points Extractor",
+            "  🔗 Intersections      → Intersection Finder",
+            "  🧭 Topic Coverage     → Coverage Analyst",
+            "  📝 Knowledge Check    → Quiz Maker",
+            "Return the chosen member's response **verbatim**; never rewrite it.",
             "Ensure the output matches the requested length (Brief/Standard/Detailed)",
-            "Do not add introductory or closing notes, just the analysis content",
-            "Do NOT rewrite member outputs; just relay them unchanged",
-            "NEVER wrap your final answer in triple back-ticks."
-    ],
+            "Do NOT add introductory or closing notes.",
+        ],
         enable_agentic_context=True,
-        debug_mode=True
+        debug_mode=False
     )
 
     return team
