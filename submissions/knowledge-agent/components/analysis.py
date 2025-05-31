@@ -1,14 +1,14 @@
 import streamlit as st
 import asyncio
 from agents import create_analysis_team, Result
-from utils import combine_sources, create_download_button
+from utils import combine_sources, create_download_button, strip_code_fences, render_dot_quickchart
 
 ANALYSIS_OPTIONS = {
     "📄 Summary": {"selected": True, "help": "A concise overview of the main points."},
     "🔍 In-depth Analysis": {"selected": False, "help": "A detailed examination of themes, arguments, and nuances."},
     "🗺️ Concept Map": {"selected": False, "help": "A text-based representation of key concepts and relationships."},
     "🎯 Key Points": {"selected": False, "help": "A bulleted list of the most important takeaways."},
-    "📊 SWOT Analysis": {"selected": False, "help": "Identifies Strengths, Weaknesses, Opportunities, and Threats."}
+    "🔗 Intersections": {"selected": False, "help": "Table of overlaps across sources."},
 }
 
 def render_analysis_config():
@@ -142,11 +142,19 @@ def render_results(results):
         for i, (analysis_type, content) in enumerate(results.items()):
             with tabs[i]:
                 st.markdown(f"### {analysis_type}")
-                st.markdown(content, unsafe_allow_html=True)
+                clean = strip_code_fences(content)
+                if analysis_type == "🗺️ Concept Map":
+                    render_dot_quickchart(clean)
+                else:
+                    st.markdown(clean, unsafe_allow_html=True)
     else:
         analysis_type, content = list(results.items())[0]
         st.markdown(f"### {analysis_type}")
-        st.markdown(content, unsafe_allow_html=True)
+        clean = strip_code_fences(content)
+        if analysis_type == "🗺️ Concept Map":
+            render_dot_quickchart(clean)
+        else:
+            st.markdown(clean, unsafe_allow_html=True)
 
     # Download section
     render_download_section(results)

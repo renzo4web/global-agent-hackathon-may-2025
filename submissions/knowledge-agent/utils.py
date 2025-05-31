@@ -1,7 +1,10 @@
+import urllib.parse
 import tiktoken
 import PyPDF2
 import io
 import streamlit as st
+import re
+import textwrap
 
 
 def count_tokens(text):
@@ -52,4 +55,37 @@ def combine_sources(sources):
     return "\n\n--- Source Separator ---\n\n".join(
         [f"Source {i + 1}:\n{s['content']}" for i, s in enumerate(sources)]
     )
+
+
+def strip_code_fences(text: str) -> str:
+    """
+    Remove leading / trailing triple-backtick blocks like
+    ```markdown … ``` or ```dot … ```
+    and return the inner payload.
+    """
+    pattern = re.compile(r"```[a-zA-Z0-9]*\s*\n(.+?)```", re.DOTALL)
+    m = pattern.search(text)
+    cleaned = m.group(1) if m else text
+    return textwrap.dedent(cleaned).strip()
+
+
+
+def render_dot_quickchart(raw: str, width: int = 700):
+    """
+    Show a DOT graph via QuickChart GraphViz PNG.
+    """
+    # 1. Strip ``` fences or stray labels
+    dot = re.sub(r"```[a-zA-Z0-9]*\s*\n(.+?)```", r"\1", raw, flags=re.DOTALL).strip()
+    dot = textwrap.dedent(dot)
+
+    # 2. If the agent still used 'A --> B' Mermaid arrows, convert them
+    if "-->" in dot and "digraph" not in dot:
+        edges = re.sub(r'"?([^"]+)"?\s*-->\s*"?([^"]+)"?', r'\1 -> \2;', dot)
+        dot = f"digraph {{\n{edges}\n}}"
+
+    # 3. Build API URL
+    encoded = urllib.parse.quote_plus(dot)
+    url = f"https://quickchart.io/graphviz?format=png&graph={encoded}"
+
+    st.image(url, width=width)
 

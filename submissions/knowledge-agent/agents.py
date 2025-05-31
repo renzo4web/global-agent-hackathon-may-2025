@@ -50,13 +50,17 @@ def create_analysis_team(api_key: str, base_url: str = DEFAULT_BASE_URL, model_i
 
     concept_mapper = Agent(
         name="Concept Mapper",
-        role="Creates conceptual relationships and mind maps",
+        role="Builds a concept graph",
         model=model,
-        instructions=["Identify main concepts", "Show relationships between ideas"],
-        markdown=True,
         tools=common_tools,
         response_model=Result,
         use_json_mode=True,
+        expected_output="digraph {",
+        instructions=[
+            "Return ONLY GraphViz DOT that starts with `digraph {` and ends with `}`.",
+            "Use lines like `A -> B;` for edges.",
+            "Do NOT wrap the code in back-ticks. No explanations."
+        ],
     )
 
     key_points_extractor = Agent(
@@ -69,18 +73,33 @@ def create_analysis_team(api_key: str, base_url: str = DEFAULT_BASE_URL, model_i
         use_json_mode=True,
     )
 
+    intersection_finder = Agent(
+        name="Intersection Finder",
+        role="Finds entities / claims mentioned by at least two sources",
+        model=model,
+        tools=common_tools,
+        response_model=Result,
+        use_json_mode=True,
+        instructions=[
+            "Return a markdown table where rows are items and columns are Source 1, Source 2, ...",
+            "DO NOT add backticks in the beginning of the table. Just the table.",
+            "Mark a ✓ when the item appears in that source.",
+            "Limit to the 15 most frequent items, ordered by number of sources.",
+        ],
+    )
+
     # Create team
     team = Team(
         name="Analysis Team",
         mode="coordinate",
         model=model,
-        members=[summarizer, analyzer, concept_mapper, key_points_extractor],
+        members=[summarizer, analyzer, concept_mapper, key_points_extractor, intersection_finder],
         instructions=[
             "Route the request to the appropriate team member based on the analysis type",
             "Ensure the output matches the requested length (Brief/Standard/Detailed)",
-            "Format all responses in clean markdown",
             "Do not add introductory or closing notes, just the analysis content",
-            "Do NOT rewrite member outputs; just relay them unchanged"
+            "Do NOT rewrite member outputs; just relay them unchanged",
+            "NEVER wrap your final answer in triple back-ticks."
     ],
         enable_agentic_context=True,
         debug_mode=True
