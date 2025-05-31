@@ -1,6 +1,6 @@
 import streamlit as st
 import asyncio
-from agents import create_analysis_team
+from agents import create_analysis_team, Result
 from utils import combine_sources, create_download_button
 
 ANALYSIS_OPTIONS = {
@@ -49,7 +49,7 @@ def render_analysis_button(api_key, base_url, model_id, selected_analysis_keys, 
             type="primary",
             use_container_width=True,
             help="Analyzes all added content sources together!",
-            disabled=not st.session_state.sources or st.session_state["processing"]
+            disabled=not st.session_state.sources
     ):
         if not api_key:
             st.error("❗ API Key Missing: Please enter your OpenAI API key in the sidebar.", icon="🔑")
@@ -108,7 +108,17 @@ async def run_analysis_tasks(team, combined_content, selected_analysis_keys, out
         {combined_content}
         """
         response = await team.arun(prompt)
-        return analysis_type, response.content
+        content = response.content
+        # 1) If the team propagated the Result object ➜ extract .result
+        if hasattr(content, "result"):
+            return analysis_type, content.result
+        # 2) If it’s a raw JSON string ➜ parse with Pydantic
+        try:
+            parsed = Result.model_validate_json(content)
+            return analysis_type, parsed.result
+        except Exception:
+        # 3) Fallback: it’s already a clean string
+            return analysis_type, content
 
     tasks = [process_single_analysis(analysis_type) for analysis_type in selected_analysis_keys]
     results_list = await asyncio.gather(*tasks)
